@@ -1,9 +1,99 @@
 import tkinter as tk
 from tkinter import *
 from tkinter import messagebox, filedialog
-from gogo_spider import search
-import sys
+import sys, shutil, os, requests, threading
+from pySmartDL import SmartDL
+from bs4 import BeautifulSoup
+import concurrent.futures
+import urllib.request
+# import progressbar
 
+# def Download_Progress(block_num, block_size, total_size):
+#     downloaded = block_num * block_size
+#     progress = int((downloaded/total_size)*100)
+#     print ("Download Progress",str(progress),"%")
+
+# pbar = None
+
+# def show_progress(block_num, block_size, total_size):
+#     global pbar
+#     if pbar is None:
+#         pbar = progressbar.ProgressBar(maxval=total_size)
+#     pbar.start()
+#     downloaded = block_num * block_size
+#     if downloaded < total_size:
+#         pbar.update(downloaded)
+#     else:
+#         pbar.finish()
+#         pbar = None
+
+def download(downloads):
+    try:
+        urllib.request.urlretrieve(downloads[0], downloads[1]) 
+        print(f"{downloads[2]} done")
+        return
+    except Exception as e:
+        # print(f"{downloads[2]} not downloaded")
+        # print(e)
+        return
+
+def parellel_downloader(downloads):
+    with concurrent.futures.ThreadPoolExecutor() as exector : 
+        futures = []
+        for url in downloads:
+            futures.append(exector.submit(download, downloads=url))
+        for future in concurrent.futures.as_completed(futures):
+            url = futures[future]
+            try:
+                data = future.result()
+            except Exception as exc:
+                print('%r generated an exception: %s' % (url[2], exc))
+            else:
+                print('%r page is %d bytes' % (url[2], len(data)))
+    sys.exit()
+
+def search(anime, root, start, end):
+    quality = {
+        "480p": [],
+        "720p" : []
+    }
+    downloads = []
+    search_name = anime.replace(" ", "-")
+    search_url = f"https://gogoanime.sh/{search_name}-dub-episode-"
+    req = requests.get(search_url)
+    destination = f"{root}/{anime}"
+    if not os.path.exists(destination):
+        os.mkdir(destination)
+
+    with open(f"{anime}.txt", "a+") as f:
+
+        for episode in range(int(start),int(end)+1):
+            episode_url = search_url + str(episode)
+            r = requests.get(episode_url)
+            soup=BeautifulSoup(r.text,'html.parser')
+            links=soup.find_all(target='_blank')
+            for link in links:
+                l=link.get('href')
+                if 'download' in l:
+                    r1=requests.get(l)
+                    s1=BeautifulSoup(r1.text,'html.parser')
+                    l1=s1.find_all('a')
+                    for l2 in l1:
+                        l3=l2.get('href')
+                        des = f"{destination}/{anime}-ep-{episode}.mp4"
+                
+                        if "480p" in l3:
+                            quality["480p"].append([l3,des,f"{anime}-ep-{episode}"])
+                            # download([l3,des,f"{anime}-ep-{episode}"])
+                        else:
+                            if "720p" in l3:
+                                quality["720p"].append([l3,des,f"{anime}-ep-{episode}"])
+                                # download([l3,des,f"{anime}-ep-{episode}"])
+        downloads = quality["480p"] if len(quality["480p"]) > 0 else quality["720p"]   
+        for download in downloads:
+            f.write(download[0] + "\n")          
+        parellel_downloader(downloads)
+                            
 def Widgets():
     link_label = Label(root, text="Anime name  :", bg="#E8D579")
     link_label.grid(row=1,
@@ -112,3 +202,4 @@ first_Episode = StringVar()
 last_Epsisode = StringVar()
 Widgets()
 root.mainloop()
+
